@@ -47,6 +47,7 @@ class Passthrough(Operations):
                       'st_gid', 'st_mode', 'st_mtime', 'st_nlink', 'st_size', 'st_uid'))
         if size is not None:
             _['st_size'] = size
+        _['st_blksize'] = 1600
         return _
 
     def readdir(self, path, fh):
@@ -102,7 +103,7 @@ class Passthrough(Operations):
     # ============
 
     def open(self, path, flags):
-        print "open " + path
+        print "open ", flags
         full_path = self._full_path(path)
         return os.open(full_path, flags)
 
@@ -122,6 +123,7 @@ class Passthrough(Operations):
 
     def write(self, path, buf, offset, fh):
         path = self._full_path(path)
+        print 'Writing with path = {0}, len(buf) = {1}, offset = {2}'.format(path, str(len(buf)), str(offset))
         yolo = writeFile(path, offset, buf)
         return yolo
         # os.lseek(fh, offset, os.SEEK_SET)

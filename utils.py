@@ -53,7 +53,8 @@ def readFile(path, offset, length):
                                       / 3200.0)) + 1]
     try:
         total_metadata = json.load(f)
-    except:
+    except Exception as e:
+        print colored(e, 'red')
         return None
     metadata = total_metadata[chunkOffset[0] : chunkOffset[1] + chunkOffset[0]]
     print ("Offset is {0} , length is {1} , and we are reading on metdata block {2} to {3}. File size is {4}. Length of metadat is {5}. We have {6} metadat blocks".format(offset, length, chunkOffset[0], chunkOffset[0] + chunkOffset[1], calculateFileSize(path), len(metadata), len(total_metadata)))
@@ -80,18 +81,56 @@ def readFile(path, offset, length):
     return final.tobytes()
 
 def writeFile(path, offset, data):
-    if offset != 0:
-        print colored('I need to take care of this', 'red')
-        raise Exception('I really need to take care of writing with offset')
-    content = bytearray(data)
-    text = ''
-    for elem in tqdm(content):
-        text += base29encode(elem)
-    f = open(path, 'w')
-    chunkSize = 3200
-    jsonInfos = []
     ba = BabelApi()
-    for chunk in tqdm(xrange(0, len(text), chunkSize)):
-        jsonInfos.append(ba.search(text[chunk : chunk + chunkSize]))
-    json.dump(jsonInfos, f)
-    return len(data)
+    if offset != 0:
+        # First, we get all the metadat after the offset to decrypt it
+        f = open(path, 'r')
+        metadata = json.load(f)
+        f.close()
+        size = 0
+        for elem in metadata:
+            size += elem['len']
+        if offset > size:
+            print colored('Error, offset {0} bigger than file size {1}'.format(offset, size), 'red')
+            return -1
+        print "We are getting metdata from #{0}, with total length of {1}".format(offset / 1600, len(metadata))
+        metadat_to_get = metadata[offset / 1600:]
+        metadata = metadata[:offset / 1600]
+        text = ""
+        for elem in metadat_to_get:
+            text += ba.lookup(elem)
+        # Now we encode the data given to us and overwrite the old data
+        content = bytearray(data)
+        buff_list = list()
+        for elem in xrange(0, len(text), 2):
+            buff_list.append(text[elem: elem + 2])
+        print "Text len is {0}, offset is {1}".format(len(text), offset)
+        text = buff_list
+        for i, elem in enumerate(content):
+            buff = base29encode(elem)
+            if (offset % (1600 * 2)) + i >= len(text):
+                text.append(buff)
+            else:
+                text[(offset % (1600 * 2)) + i] = buff
+        # Now we can lookup the text and save it to the json array
+        text = ''.join(text)
+        chunkSize = 3200
+        for chunk in tqdm(xrange(0, len(text), chunkSize)):
+            metadata.append(ba.search(text[chunk : chunk + chunkSize]))
+        f = open(path, 'w')
+        json.dump(metadata, f)
+        f.close()
+        return len(data)
+    else:
+        content = bytearray(data)
+        text = ''
+        for elem in tqdm(content):
+            text += base29encode(elem)
+        f = open(path, 'w')
+        chunkSize = 3200
+        jsonInfos = []
+        for chunk in tqdm(xrange(0, len(text), chunkSize)):
+            jsonInfos.append(ba.search(text[chunk : chunk + chunkSize]))
+        json.dump(jsonInfos, f)
+        f.close()
+        return len(data)
